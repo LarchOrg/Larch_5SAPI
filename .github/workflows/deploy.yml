@@ -16,10 +16,10 @@ jobs:
       run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
     - name: Build image
-      run: docker build -t ${{ secrets.DOCKER_USERNAME }}/moldapi:latest .
+      run: docker build -t ${{ secrets.DOCKER_USERNAME }}/5sauditapi:latest .
 
     - name: Push image
-      run: docker push ${{ secrets.DOCKER_USERNAME }}/moldapi:latest
+      run: docker push ${{ secrets.DOCKER_USERNAME }}/5sauditapi:latest
 
     - name: Deploy to Linux
       uses: appleboy/ssh-action@v1
@@ -28,10 +28,10 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
         script: |
-          docker pull ${{ secrets.DOCKER_USERNAME }}/moldapi:latest
-          docker stop moldapi || true
-          docker rm moldapi || true
-          docker run -d -p 127.0.0.1:8091:8080 --name moldapi ${{ secrets.DOCKER_USERNAME }}/moldapi:latest
+          docker pull ${{ secrets.DOCKER_USERNAME }}/5sauditapi:latest
+          docker stop 5sauditapi || true
+          docker rm 5sauditapi || true
+          docker run -d -p 127.0.0.1:8091:8080 --name 5sauditapi ${{ secrets.DOCKER_USERNAME }}/5sauditapi:latest
           
 
 
