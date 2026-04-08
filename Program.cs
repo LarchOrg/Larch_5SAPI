@@ -51,7 +51,8 @@ builder.Services.AddCors(options =>
         {
             policy.WithOrigins("http://localhost:5173", "https://localhost:5173", "https://5sAuditapi.larcherp.com", "http://5sAuditapi.larcherp.com") // React dev URL
                   .AllowAnyHeader()
-                  .AllowAnyMethod();
+                  .AllowAnyMethod()
+                  .AllowCredentials(); ;
         });
 });
 builder.Services.AddControllers();
@@ -75,6 +76,8 @@ if (app.Environment.IsDevelopment())
 // app.UseHttpsRedirection();
 app.UseStaticFiles();
 
+app.UseRouting();
+
 app.UseCors("AllowReactDev");
 
 app.UseAuthentication();
@@ -82,5 +85,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Handle preflight
+app.MapMethods("{*path}", new[] { "OPTIONS" }, () => Results.Ok());
 
 app.Run();
