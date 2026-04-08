@@ -59,10 +59,12 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+
+app.UseCors("AllowReactDev");
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
+
+app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "5S Audit API v1");
@@ -71,14 +73,13 @@ if (app.Environment.IsDevelopment())
 
     app.MapOpenApi();
     app.MapScalarApiReference();
-}
+
 
 // app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
 
-app.UseCors("AllowReactDev");
 
 app.UseAuthentication();
 
