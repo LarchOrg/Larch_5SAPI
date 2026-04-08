@@ -49,7 +49,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowReactDev",
         policy =>
         {
-            policy.WithOrigins("http://localhost:5173", "https://localhost:5173", "https://5sAuditapi.larcherp.com", "http://5sAuditapi.larcherp.com") // React dev URL
+            policy.WithOrigins("http://localhost:5173", "https://localhost:5173", "https://5sAudit.larcherp.com", "http://5sAuditapi.larcherp.com") // React dev URL
                   .AllowAnyHeader()
                   .AllowAnyMethod()
                   .AllowCredentials(); ;
