@@ -49,7 +49,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowReactDev",
         policy =>
         {
-            policy.WithOrigins("http://localhost:5173", "https://localhost:5173", "https://5sAudit.larcherp.com", "http://5sAuditapi.larcherp.com") // React dev URL
+            policy.WithOrigins("http://localhost:5173", "https://localhost:5173", "https://5saudit.larcherp.com", "http://5sAuditapi.larcherp.com") // React dev URL
                   .AllowAnyHeader()
                   .AllowAnyMethod()
                   .AllowCredentials(); ;
@@ -87,6 +87,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Handle preflight
-app.MapMethods("{*path}", new[] { "OPTIONS" }, () => Results.Ok());
+//app.MapMethods("{*path}", new[] { "OPTIONS" }, () => Results.Ok());
 
 app.Run();
