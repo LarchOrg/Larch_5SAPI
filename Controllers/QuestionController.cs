@@ -22,17 +22,17 @@ namespace _5sAudit.Controllers
 
         // GET: api/Question
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Question>>> GetQuestions()
+        public async Task<ActionResult<IEnumerable<FsaChecklistMst>>> GetQuestions()
         {
             // Using Stored Procedure to GET questions
-            return await _context.Questions.FromSqlRaw("EXEC sp_GetAllQuestions").ToListAsync();
+            return await _context.FsaChecklistMsts.FromSqlRaw("EXEC sp_GetAllQuestions").ToListAsync();
         }
 
         // GET: api/Question/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Question>> GetQuestion(int id)
+        public async Task<ActionResult<FsaChecklistMst>> GetQuestion(int id)
         {
-            var question = await _context.Questions.FindAsync(id);
+            var question = await _context.FsaChecklistMsts.FindAsync(id);
 
             if (question == null)
             {
@@ -44,31 +44,86 @@ namespace _5sAudit.Controllers
 
         // POST: api/Question
         [HttpPost]
-        public async Task<ActionResult<Question>> PostQuestion(Question question)
+        public async Task<ActionResult<FsaChecklistMst>> PostQuestion(FsaChecklistMst question)
         {
             question.CreatedDt = DateTime.Now;
-            if (question.Status == null)
+            question.ModifiedDt = DateTime.Now;
+            if (string.IsNullOrEmpty(question.Status))
             {
-                question.Status = true;
+                question.Status = "A";
             }
 
-            _context.Questions.Add(question);
+            _context.FsaChecklistMsts.Add(question);
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetQuestion), new { id = question.Id }, question);
+        }
+
+        // PUT: api/Question/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutQuestion(int id, FsaChecklistMst question)
+        {
+            // 1. Check if the URL ID matches the body ID
+            if (id != question.Id)
+            {
+                return BadRequest("Question ID mismatch.");
+            }
+
+            // 2. Find the existing record in the database
+            var existingQuestion = await _context.FsaChecklistMsts.FindAsync(id);
+            if (existingQuestion == null)
+            {
+                return NotFound($"Question with ID {id} not found.");
+            }
+
+            // 3. Update only the editable fields
+            existingQuestion.AuditType = question.AuditType;
+            existingQuestion.Category = question.Category;
+            existingQuestion.Question = question.Question;
+            existingQuestion.Status = string.IsNullOrEmpty(question.Status) ? "A" : question.Status;
+
+            // 4. Update the modified timestamp
+            existingQuestion.ModifiedDt = DateTime.Now;
+
+            // 5. Mark as modified and save
+            _context.Entry(existingQuestion).State = EntityState.Modified;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!QuestionExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            return NoContent(); // Returns 204 Success
+        }
+
+        // Helper method to check existence
+        private bool QuestionExists(int id)
+        {
+            return _context.FsaChecklistMsts.Any(e => e.Id == id);
         }
 
         // DELETE: api/Question/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteQuestion(int id)
         {
-            var question = await _context.Questions.FindAsync(id);
+            var question = await _context.FsaChecklistMsts.FindAsync(id);
             if (question == null)
             {
                 return NotFound();
             }
 
-            _context.Questions.Remove(question);
+            _context.FsaChecklistMsts.Remove(question);
             await _context.SaveChangesAsync();
 
             return NoContent();

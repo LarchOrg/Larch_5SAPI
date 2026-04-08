@@ -59,13 +59,11 @@ public partial class FsaUser
     [Column("experience")]
     public int? Experience { get; set; }
 
-    [Column("dob")]
-    [Unicode(false)]
-    public string? Dob { get; set; }
+    [Column("dob", TypeName = "datetime2")]
+    public DateTime? Dob { get; set; }
 
-    [Column("doj")]
-    [Unicode(false)]
-    public string? Doj { get; set; }
+    [Column("doj", TypeName = "datetime2")]
+    public DateTime? Doj { get; set; }
 
     public int? DeptId { get; set; }
 

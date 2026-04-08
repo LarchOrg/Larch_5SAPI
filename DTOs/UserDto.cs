@@ -13,7 +13,7 @@ namespace _5sAudit.DTOs
         public int? PlantId { get; set; }
         public int? DeptId { get; set; }
         public int? Experience { get; set; }
-        public string? Dob { get; set; }
-        public string? Doj { get; set; }
+        public DateTime? Dob { get; set; }
+        public DateTime? Doj { get; set; }
     }
 }
