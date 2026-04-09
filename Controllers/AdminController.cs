@@ -205,13 +205,26 @@ namespace _5sAudit.Controllers
         [HttpGet("Auditors")]
         public async Task<ActionResult<IEnumerable<object>>> GetAuditors()
         {
-            // Using your FsaUser model properties: Id, Firstname, Lastname, Status
-            return await _context.FsaUsers
-                .Where(u => u.Status == "A") // Assuming 'A' means Active
-                .Select(u => new {
-                    id = u.Id,
-                    fullName = u.Firstname + " " + (u.Lastname ?? "")
-                }).ToListAsync();
+            try
+            {
+                var auditors = await (from u in _context.FsaUsers
+                                      join r in _context.FsaRoleMsts on u.RoleId equals r.RoleId
+                                      // Filter for Active users AND the specific Auditor role
+                                      where u.Status == "A" && r.RoleName == "Auditor"
+                                      select new
+                                      {
+                                          id = u.Id,
+                                          fullName = (u.Firstname + " " + (u.Lastname ?? "")).Trim(),
+                                          email = u.EmailId,
+                                          role = r.RoleName
+                                      }).ToListAsync();
+
+                return Ok(auditors);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
     }
 }

@@ -53,7 +53,8 @@ namespace _5sAudit.Controllers
             {
                 Token = token,
                 Role = roleName,
-                FullName = $"{user.Firstname} {user.Lastname}"
+                FullName = $"{user.Firstname} {user.Lastname}",
+                Id=user.Id
             });
         }
 
@@ -67,6 +68,8 @@ namespace _5sAudit.Controllers
             var claims = new[] {
                 new Claim(JwtRegisteredClaimNames.Email, user.EmailId ?? ""),
                 new Claim(ClaimTypes.Role, role),
+
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim("UserId", user.Id.ToString()),
                 new Claim("CompanyId", user.CompanyId.ToString()) // Explicitly calling .ToString()
             };

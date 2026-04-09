@@ -26,32 +26,63 @@ namespace _5sAudit.Controllers
         {
             try
             {
-                var audits = await (from a in _context.FsaAuditInits
-                                    join u in _context.FsaUsers on a.AuditorId equals u.Id
-                                    join d in _context.FsaDepartments on a.DeptId equals d.CdIId into deptJoin
-                                    from d in deptJoin.DefaultIfEmpty()
-                                        // Join with ScoreSummary to get actual performance results
-                                    join s in _context.FsaScoreSummaries on a.AuditId equals s.audit_id into scoreJoin
-                                    from s in scoreJoin.DefaultIfEmpty()
-                                    select new
-                                    {
-                                        id = a.AuditId,
-                                        auditor = (u.Firstname + " " + (u.Lastname ?? "")).Trim(),
-                                        auditType = a.AuditType,
-                                        department = d != null ? d.CdVDeptName : "N/A",
-                                        scheduledDate = a.ScheduledDate.ToString("yyyy-MM-dd"),
-                                        title = a.AuditType,
-                                        time = a.ScheduledTime.ToString(@"hh\:mm"),
-                                        status = a.Status ?? "Scheduled",
-                                        dueDate = a.ScheduledDate.ToString("dd MMM"),
-                                        // Score data for the list view
-                                        progress = a.Status == "Completed" ? 100 : 0,
-                                        totalScore = s != null ? (double)s.total_score : 0,
-                                        maxScore = s != null ? (double)s.max_possible_score : 0,
-                                        percentage = s != null ? (double)s.percentage : 0 // Returning as decimal/number
-                                    }).ToListAsync();
+                // 1. Get User Claims
+                var currentUserIdClaim = User.FindFirst("UserId")?.Value;
+                var currentUserRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
 
-                return Ok(audits);
+                // 2. Define the Query (Do NOT use await or ToListAsync yet)
+                var query = from a in _context.FsaAuditInits
+                            join u in _context.FsaUsers on a.AuditorId equals u.Id
+                            join d in _context.FsaDepartments on a.DeptId equals d.CdIId into deptJoin
+                            from d in deptJoin.DefaultIfEmpty()
+                            join s in _context.FsaScoreSummaries on a.AuditId equals s.audit_id into scoreJoin
+                            from s in scoreJoin.DefaultIfEmpty()
+                            select new
+                            {
+                                id = a.AuditId,
+                                auditorId = a.AuditorId,
+                                auditor = (u.Firstname + " " + (u.Lastname ?? "")).Trim(),
+                                auditType = a.AuditType,
+                                department = d != null ? d.CdVDeptName : "N/A",
+                                scheduledDate = a.ScheduledDate, // Keep as DateTime for now
+                                title = a.AuditType,
+                                time = a.ScheduledTime,
+                                status = a.Status ?? "Scheduled",
+                                progress = a.Status == "Completed" ? 100 : 0,
+                                totalScore = s != null ? (double)s.total_score : 0,
+                                maxScore = s != null ? (double)s.max_possible_score : 0,
+                                percentage = s != null ? (double)s.percentage : 0
+                            };
+
+                // 3. Apply Backend Security Filtering on the Query
+                if (currentUserRole == "auditor" && !string.IsNullOrEmpty(currentUserIdClaim))
+                {
+                    int userId = int.Parse(currentUserIdClaim);
+                    query = query.Where(x => x.auditorId == userId);
+                }
+
+                // 4. Execute the Query ONCE
+                var rawData = await query.ToListAsync();
+
+                // 5. Final Formatting (Strings/Dates) before sending to React
+                var formattedData = rawData.Select(a => new {
+                    a.id,
+                    a.auditorId,
+                    a.auditor,
+                    a.auditType,
+                    a.department,
+                    scheduledDate = a.scheduledDate.ToString("yyyy-MM-dd"),
+                    a.title,
+                    time = a.time.ToString(@"hh\:mm"),
+                    a.status,
+                    dueDate = a.scheduledDate.ToString("dd MMM"),
+                    a.progress,
+                    a.totalScore,
+                    a.maxScore,
+                    a.percentage
+                });
+
+                return Ok(formattedData);
             }
             catch (Exception ex)
             {
