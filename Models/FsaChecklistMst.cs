@@ -32,7 +32,7 @@ namespace _5sAudit.Models
 
         public DateTime CreatedDt { get; set; } = DateTime.Now;
 
-        public string? ModifiedBy { get; set; }
+        public int? ModifiedBy { get; set; }
 
         public DateTime? ModifiedDt { get; set; }
     }

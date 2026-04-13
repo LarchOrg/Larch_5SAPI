@@ -4,6 +4,7 @@
         {
             public int Id { get; set; }
             public string? PlantName { get; set; }
-        }
+            public int? CompanyId { get; set; }
+    }
 }
 

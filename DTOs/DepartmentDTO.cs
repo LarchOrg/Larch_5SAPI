@@ -5,6 +5,7 @@
         public int Id { get; set; }
         public string DeptName { get; set; }
         public int PlantId { get; set; }
+        public int? CompanyId { get; set; }
     }
 }
 

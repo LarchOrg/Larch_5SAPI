@@ -1,12 +1,16 @@
+using _5sAudit.Data;
+using _5sAudit.DTOs;
+using _5sAudit.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using _5sAudit.Data;
-using _5sAudit.Models;
-using _5sAudit.DTOs;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace _5sAudit.Controllers
 {
     [ApiController]
+    [Authorize]
     [Route("api/[controller]")]
     public class UserController : ControllerBase
     {
@@ -16,6 +20,9 @@ namespace _5sAudit.Controllers
         {
             _context = context;
         }
+
+        private int CurrentUserId => int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+        private int CurrentCompanyId => int.Parse(User.FindFirst("CompanyId")?.Value ?? "0");
 
         [HttpPost("save")]
         public async Task<IActionResult> SaveUser([FromBody] UserDto userDto)
@@ -39,7 +46,10 @@ namespace _5sAudit.Controllers
                 {
                     return Conflict("User with this email already exists");
                 }
-
+                var userCompanyClaim = User.FindFirst("CompanyId")?.Value;
+                int targetCompanyId = !string.IsNullOrEmpty(userCompanyClaim)
+                    ? int.Parse(userCompanyClaim)
+                    : userDto.CompanyId;
                 // Map DTO to Entity
                 var user = new FsaUser
                 {
@@ -49,8 +59,8 @@ namespace _5sAudit.Controllers
                     Password = userDto.Password,
                     MobileNo = userDto.MobileNo,
                     RoleId = userDto.RoleId,
-                    CompanyId = userDto.CompanyId,
-               
+                    CompanyId = targetCompanyId,
+                    CreatedBy = CurrentUserId, 
                     PlantId = userDto.PlantId,
                     DeptId = userDto.DeptId,
                     Experience = userDto.Experience,
@@ -75,7 +85,35 @@ namespace _5sAudit.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<FsaUser>>> GetUsers()
         {
-            return await _context.FsaUsers.ToListAsync();
+            var companyId = CurrentCompanyId;
+            if (companyId == 0) return BadRequest("Invalid Company ID");
+
+            var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value?.ToLower();
+            var currentUser = await _context.FsaUsers.FindAsync(CurrentUserId);
+
+            // 2. Start query filtered by Company
+            var query = _context.FsaUsers.Where(u => u.CompanyId == companyId);
+
+            // 3. Apply Plant filter if not a Super Admin or Company Admin
+            // (Assuming 'admin' or 'super_admin' can see the whole company)
+            if (currentUser != null)
+            {
+                // Only SUPER ADMIN can see all plants
+                if (currentUserRole != "super_admin")
+                {
+                    if (currentUser.PlantId.HasValue && currentUser.PlantId > 0)
+                    {
+                        query = query.Where(u => u.PlantId == currentUser.PlantId);
+                    }
+                    else
+                    {
+                        // Optional safety: if no plant assigned → return nothing
+                        query = query.Where(u => false);
+                    }
+                }
+            }
+
+            return await query.ToListAsync();
         }
 
         [HttpGet("roles")]
@@ -87,7 +125,12 @@ namespace _5sAudit.Controllers
         [HttpGet("departments")]
         public async Task<IActionResult> GetDepartments()
         {
+            var companyId = CurrentCompanyId;
+            if (companyId == 0) return BadRequest("Invalid Company ID");
+
+            // Filter departments by CompanyId to ensure users only see their own company's units
             var data = await _context.FsaDepartments
+                .Where(d => d.CdICompanyId == companyId) // Ensure this column exists
                 .Select(d => new DepartmentDTO
                 {
                     Id = d.CdIId,
@@ -100,18 +143,34 @@ namespace _5sAudit.Controllers
         }
 
         [HttpGet("plants")]
-        public async Task<IActionResult> GetPlants()
+        public async Task<ActionResult> GetPlants()
         {
-            var plants = await _context.Plants
-                .Select(p => new PlantDto
+            var currentUserRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            var currentUser = await _context.FsaUsers.FindAsync(CurrentUserId);
+
+            var query = _context.Plants.Where(p => p.Status == "Active" || p.Status == "A");
+
+            if (currentUser != null && currentUserRole?.ToLower() != "super_admin")
+            {
+                query = query.Where(p => p.CompanyId == currentUser.CompanyId);
+
+                if (currentUser.PlantId.HasValue && currentUser.PlantId > 0)
                 {
-                    Id = p.Id,
-                    PlantName = p.PlantName
+                    query = query.Where(p => p.Id == currentUser.PlantId);
+                }
+            }
+
+            var plants = await query
+                .Select(p => new {
+                    id = p.Id,
+                    plantName = p.PlantName,
+                    companyId = p.CompanyId
                 })
                 .ToListAsync();
 
             return Ok(plants);
         }
+
 
         [HttpPut("update/{id}")]
         public async Task<IActionResult> UpdateUser(int id, [FromBody] UserDto userDto)
@@ -155,10 +214,29 @@ namespace _5sAudit.Controllers
 
             try
             {
+                // 1. Get CompanyId from the logged-in user's claims (Best Practice)
+                var userCompanyClaim = User.FindFirst("CompanyId")?.Value;
+
+                if (!string.IsNullOrEmpty(userCompanyClaim))
+                {
+                    dept.CdICompanyId = int.Parse(userCompanyClaim);
+                }
+                else if (dept.CdIPlantId > 0)
+                {
+                    // 2. Fallback: Lookup CompanyId from the Plant table if not in claims
+                    var plant = await _context.Plants
+                        .FirstOrDefaultAsync(p => p.Id == dept.CdIPlantId);
+
+                    if (plant != null)
+                    {
+                        dept.CdICompanyId = plant.CompanyId; // Assuming your Plant model has CompanyId
+                    }
+                }
+
                 // Set default values for the model
                 dept.CdVStatus = "Active";
                 dept.CdDCreatedDt = DateTime.Now;
-
+                dept.CdICreatedBy = CurrentUserId;
                 _context.FsaDepartments.Add(dept);
                 await _context.SaveChangesAsync();
 

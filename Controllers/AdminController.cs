@@ -1,13 +1,17 @@
+using _5sAudit.Data;
+using _5sAudit.DTOs;
+using _5sAudit.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using _5sAudit.Data;
-using _5sAudit.Models;
-using _5sAudit.DTOs;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace _5sAudit.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class AdminController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
@@ -16,6 +20,7 @@ namespace _5sAudit.Controllers
         {
             _context = context;
         }
+        private int CurrentUserId => int.Parse(User.FindFirst("UserId")?.Value ?? "0");
 
         [HttpGet("FsaUsers")]
         public async Task<ActionResult> GetUsers()
@@ -57,6 +62,7 @@ namespace _5sAudit.Controllers
             // Toggle logic: If 'A' set to 'I', otherwise set to 'A'
             user.Status = (user.Status == "A") ? "I" : "A";
             user.ModifiedDt = DateTime.Now;
+            user.ModifiedBy = CurrentUserId;
 
             _context.Entry(user).State = EntityState.Modified;
             await _context.SaveChangesAsync();
@@ -78,7 +84,7 @@ namespace _5sAudit.Controllers
                 Password = userDto.Password,
                 MobileNo = userDto.MobileNo,
                 Status = "A",
-                CreatedBy = 1,
+                CreatedBy = CurrentUserId,
                 CreatedDt = DateTime.Now,
                 // FIX: ModifiedDt is required in your FsaUser model (non-nullable)
                 ModifiedDt = DateTime.Now,
@@ -167,6 +173,7 @@ namespace _5sAudit.Controllers
         {
             company.Status = "A";
             company.CreatedDt = DateTime.Now;
+            company.CreatedBy = CurrentUserId;
             _context.Companies.Add(company);
             await _context.SaveChangesAsync();
             return Ok(company);
@@ -177,6 +184,7 @@ namespace _5sAudit.Controllers
         {
             plant.Status = "A";
             plant.CreatedDt = DateTime.Now;
+            plant.CreatedBy = CurrentUserId;
             _context.Plants.Add(plant);
             await _context.SaveChangesAsync();
             return Ok(plant);
@@ -185,15 +193,54 @@ namespace _5sAudit.Controllers
         [HttpGet("Companies")]
         public async Task<ActionResult<IEnumerable<Company>>> GetCompanies() => await _context.Companies.ToListAsync();
 
-        [HttpGet("Plants")]
-        public async Task<ActionResult<IEnumerable<Plant>>> GetPlants() => await _context.Plants.ToListAsync();
+        [HttpGet("plants")]
+        public async Task<ActionResult> GetPlants()
+        {
+            var currentUserRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            var currentUser = await _context.FsaUsers.FindAsync(CurrentUserId);
+
+            var query = _context.Plants.Where(p => p.Status == "Active" || p.Status == "A");
+
+            if (currentUser != null && currentUserRole?.ToLower() != "super_admin")
+            {
+                query = query.Where(p => p.CompanyId == currentUser.CompanyId);
+                
+                if (currentUser.PlantId.HasValue && currentUser.PlantId > 0)
+                {
+                    query = query.Where(p => p.Id == currentUser.PlantId);
+                }
+            }
+
+            var plants = await query
+                .Select(p => new {
+                    id = p.Id,
+                    plantName = p.PlantName,
+                    companyId = p.CompanyId
+                })
+                .ToListAsync();
+
+            return Ok(plants);
+        }
 
         [HttpGet("Departments")]
         public async Task<ActionResult<IEnumerable<DepartmentDTO>>> GetDepartments()
         {
-            // Make sure your DbContext has: public DbSet<FsaDepartment> FsaDepartments { get; set; }
-            return await _context.FsaDepartments
-                .Where(d => d.CdVStatus == "Active")
+            var currentUserRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            var currentUser = await _context.FsaUsers.FindAsync(CurrentUserId);
+
+            var query = _context.FsaDepartments.Where(d => d.CdVStatus == "Active");
+
+            if (currentUser != null && currentUserRole?.ToLower() != "super_admin")
+            {
+                query = query.Where(d => d.CdICompanyId == currentUser.CompanyId);
+
+                if (currentUser.PlantId.HasValue && currentUser.PlantId > 0)
+                {
+                    query = query.Where(d => d.CdIPlantId == currentUser.PlantId);
+                }
+            }
+
+            return await query
                 .Select(d => new DepartmentDTO
                 {
                     Id = d.CdIId,
@@ -207,17 +254,30 @@ namespace _5sAudit.Controllers
         {
             try
             {
-                var auditors = await (from u in _context.FsaUsers
-                                      join r in _context.FsaRoleMsts on u.RoleId equals r.RoleId
-                                      // Filter for Active users AND the specific Auditor role
-                                      where u.Status == "A" && r.RoleName == "Auditor"
-                                      select new
-                                      {
-                                          id = u.Id,
-                                          fullName = (u.Firstname + " " + (u.Lastname ?? "")).Trim(),
-                                          email = u.EmailId,
-                                          role = r.RoleName
-                                      }).ToListAsync();
+                var currentUserRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                var currentUser = await _context.FsaUsers.FindAsync(CurrentUserId);
+
+                var query = _context.FsaUsers
+                    .Join(_context.FsaRoleMsts, u => u.RoleId, r => r.RoleId, (u, r) => new { u, r })
+                    .Where(x => x.u.Status == "A" && x.r.RoleName == "Auditor");
+
+                if (currentUser != null && currentUserRole?.ToLower() != "super_admin")
+                {
+                    query = query.Where(x => x.u.CompanyId == currentUser.CompanyId);
+
+                    if (currentUser.PlantId.HasValue && currentUser.PlantId > 0)
+                    {
+                        query = query.Where(x => x.u.PlantId == currentUser.PlantId);
+                    }
+                }
+
+                var auditors = await query.Select(x => new
+                {
+                    id = x.u.Id,
+                    fullName = (x.u.Firstname + " " + (x.u.Lastname ?? "")).Trim(),
+                    email = x.u.EmailId,
+                    role = x.r.RoleName
+                }).ToListAsync();
 
                 return Ok(auditors);
             }

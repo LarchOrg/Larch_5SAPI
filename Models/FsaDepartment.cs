@@ -14,7 +14,7 @@ namespace _5sAudit.Models
         public int CdIPlantId { get; set; }
 
         [Column("cd_iCompanyId")]
-        public int CdICompanyId { get; set; }
+        public int? CdICompanyId { get; set; }
 
         [Column("cd_vDeptName")]
         public required string CdVDeptName { get; set; }

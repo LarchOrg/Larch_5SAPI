@@ -54,7 +54,9 @@ namespace _5sAudit.Controllers
                 Token = token,
                 Role = roleName,
                 FullName = $"{user.Firstname} {user.Lastname}",
-                Id=user.Id
+                Id=user.Id,
+                CompanyId = user.CompanyId
+
             });
         }
 

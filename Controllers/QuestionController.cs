@@ -81,6 +81,7 @@ namespace _5sAudit.Controllers
             existingQuestion.Category = question.Category;
             existingQuestion.Question = question.Question;
             existingQuestion.Status = string.IsNullOrEmpty(question.Status) ? "A" : question.Status;
+            existingQuestion.ModifiedBy = question.ModifiedBy;
 
             // 4. Update the modified timestamp
             existingQuestion.ModifiedDt = DateTime.Now;

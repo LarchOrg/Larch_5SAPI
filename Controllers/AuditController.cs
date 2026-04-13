@@ -1,4 +1,4 @@
-﻿using _5sAudit.Data;
+using _5sAudit.Data;
 using _5sAudit.Models;
 using _5sAudit.DTOs;
 using Microsoft.EntityFrameworkCore;
@@ -26,11 +26,14 @@ namespace _5sAudit.Controllers
         {
             try
             {
-                // 1. Get User Claims
-                var currentUserIdClaim = User.FindFirst("UserId")?.Value;
+                // 1. Get User Claims from Token
+                var currentUserIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 var currentUserRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                
+                int userId = string.IsNullOrEmpty(currentUserIdClaim) ? 0 : int.Parse(currentUserIdClaim);
+                var currentUser = await _context.FsaUsers.FindAsync(userId);
 
-                // 2. Define the Query (Do NOT use await or ToListAsync yet)
+                // 2. Define the Query with Joins
                 var query = from a in _context.FsaAuditInits
                             join u in _context.FsaUsers on a.AuditorId equals u.Id
                             join d in _context.FsaDepartments on a.DeptId equals d.CdIId into deptJoin
@@ -41,10 +44,12 @@ namespace _5sAudit.Controllers
                             {
                                 id = a.AuditId,
                                 auditorId = a.AuditorId,
+                                companyId = a.CompanyId,
+                                plantId = a.PlantId, // add plantId in select
                                 auditor = (u.Firstname + " " + (u.Lastname ?? "")).Trim(),
                                 auditType = a.AuditType,
                                 department = d != null ? d.CdVDeptName : "N/A",
-                                scheduledDate = a.ScheduledDate, // Keep as DateTime for now
+                                scheduledDate = a.ScheduledDate,
                                 title = a.AuditType,
                                 time = a.ScheduledTime,
                                 status = a.Status ?? "Scheduled",
@@ -54,17 +59,31 @@ namespace _5sAudit.Controllers
                                 percentage = s != null ? (double)s.percentage : 0
                             };
 
-                // 3. Apply Backend Security Filtering on the Query
-                if (currentUserRole == "auditor" && !string.IsNullOrEmpty(currentUserIdClaim))
-                {
-                    int userId = int.Parse(currentUserIdClaim);
-                    query = query.Where(x => x.auditorId == userId);
-                }
+                // 3. Apply Multi-Tenant Security Filtering
 
-                // 4. Execute the Query ONCE
+                if (currentUser != null && currentUserRole?.ToLower() != "super_admin")
+                {
+                    // Filter by Company
+                    query = query.Where(x => x.companyId == currentUser.CompanyId);
+
+                    // Filter by Plant if the user is associated with a specific plant
+                    if (currentUser.PlantId.HasValue && currentUser.PlantId > 0)
+                    {
+                        query = query.Where(x => x.plantId == currentUser.PlantId);
+                    }
+
+                    // CASE A: If user is an Auditor, they only see audits ASSIGNED to them
+                    if (currentUserRole?.ToLower() == "auditor")
+                    {
+                        query = query.Where(x => x.auditorId == userId);
+                    }
+                }
+                // CASE C: If user is SuperAdmin, we do NOT add any filter (they see everything)
+
+                // 4. Execute the Query
                 var rawData = await query.ToListAsync();
 
-                // 5. Final Formatting (Strings/Dates) before sending to React
+                // 5. Final Formatting for React
                 var formattedData = rawData.Select(a => new {
                     a.id,
                     a.auditorId,
